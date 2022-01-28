@@ -509,7 +509,13 @@ set_links(struct proc_struct *proc) {
 
 首先引入**僵尸进程**的概念：如果子进程比父进程先结束，而父进程又没有释放子进程占用的资源，此时子进程将成为一个僵尸进程
 
-do_wait()函数先检查当前进程的子进程是否是僵尸进程，如果是的话就释放其所有资源；如果子进程不是僵尸进程，则设定父进程的状态为阻塞态，然后CPU调度执行子进程，等待子进程执行完毕再执行
+do_wait()函数先检查当前进程的子进程是否是僵尸进程，如果是的话就释放其所有资源，包括
+
+- 将子进程移出hash链表和进程链表
+- 释放子进程的内核栈
+- 释放子进程的进程控制块
+
+如果子进程不是僵尸进程，则设定父进程的状态为阻塞态，然后CPU调度执行子进程，等待子进程执行完毕再执行
 
 ```c
 //当前进程检查pid进程是否是其子进程，如果是的话等子进程执行完再执行父进程
@@ -564,12 +570,12 @@ found://子进程是僵尸进程时，释放子进程的所有资源
     }
     local_intr_save(intr_flag);
     {
-        unhash_proc(proc);
-        remove_links(proc);
+        unhash_proc(proc);//将子进程移出hash链表
+        remove_links(proc);//将子进程移出进程链表
     }
     local_intr_restore(intr_flag);
-    put_kstack(proc);
-    kfree(proc);
+    put_kstack(proc);//释放子进程的内核栈
+    kfree(proc);//释放子进程的进程控制块
     return 0;
 }
 ```
@@ -603,7 +609,7 @@ do_exit(int error_code) {
         }
         current->mm = NULL;
     }
-    current->state = PROC_ZOMBIE;
+    current->state = PROC_ZOMBIE;//当前进程变为僵尸进程
     current->exit_code = error_code;
     
     bool intr_flag;
@@ -640,6 +646,8 @@ do_exit(int error_code) {
 
 需要注意的是，如果当前进程的子进程是僵尸进程，需要唤醒init进程来完成回收该子进程的任务（41-43行）。回顾init_main()，里面会调用do_wait()，而这一函数中处理了子进程为僵尸进程的问题。
 
+所以，只要当前进程退出，则把子进程交给init进程接管，僵尸进程的问题也就不复存在
+
 ```c
 static int
 init_main(void *arg) {
@@ -658,4 +666,22 @@ init_main(void *arg) {
 }
 ```
 
-所以总结一下就是，只要当前进程退出，则把子进程交给init进程接管，僵尸进程的问题也不复存在啦~
+##### 僵尸进程已回收的和未回收的
+
+在do_exit()中，僵尸进程已经被回收的部分：
+
+```c
+exit_mmap(mm);//释放当前进程的用户空间内存，释放页表内存
+put_pgdir(mm);//释放页目录所占内存
+mm_destroy(mm);//释放mm以及其管理的vma
+```
+
+但还需要经由父进程调用do_wait()来回收的部分：
+
+- 将子进程移出hash链表和进程链表
+- 释放子进程的内核栈
+- 释放子进程的进程控制块
+
+##### 进程状态转换图
+
+![](pic/进程状态转换图.png)
