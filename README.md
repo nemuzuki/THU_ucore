@@ -1,5 +1,5 @@
 # THU_ucore
-清华大学ucore实验报告
+清华大学ucore操作系统实验报告
 
 lab1 系统软件启动过程
 
