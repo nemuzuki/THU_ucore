@@ -108,19 +108,17 @@ execve_exit:
 
 包括6个步骤
 
-- 建立mm
-- 建立页目录
-- 加载elf文件中的各个段到内存
-- 分配用户栈空间
-- 为当前进程的mm设定参数
-- 设定当前进程的trapframe为用户态的对应值，其中
-  - 栈顶esp设置为0xB0000000，这正是用户空间的最大虚拟地址
-  - eip设置为elf->e_entry，即该elf文件对应的程序入口地址，使得系统调用中断返回时能够跳转到该地址执行elf文件的程序
+- （1）建立mm
+- （2）建立页目录
+- （3）加载elf文件中的各个段到内存
+- （4）分配用户栈空间
+- （5）为当前进程的mm设定参数
+- （6）设定当前进程的trapframe为用户态的对应值。其中栈顶esp设置为0xB0000000，这正是用户空间的最大虚拟地址。eip设置为elf->e_entry，即该elf文件对应的程序入口地址，使得系统调用中断返回时能够跳转到该地址执行elf文件的程序
 
 ```c
 static int
 load_icode(unsigned char *binary, size_t size) {
-    if (current->mm != NULL) {
+    if (current->mm != NULL) {//当前进程的mm已释放，才能创建新进程的mm
         panic("load_icode: current->mm must be empty.\n");
     }
 
